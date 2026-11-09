@@ -1,0 +1,26 @@
+{
+  "name": "stylefreeze",
+  "version": "0.1.0",
+  "description": "Stop paying Opus to reformat your files. AST-level surgical diff enforcer for Claude Code, Codex, and Cursor.",
+  "main": "bin/stylefreeze.js",
+  "bin": {
+    "stylefreeze": "bin/stylefreeze.js"
+  },
+  "keywords": [
+    "ast",
+    "git",
+    "ai",
+    "claude",
+    "cursor",
+    "codex",
+    "diff",
+    "tree-sitter",
+    "linter"
+  ],
+  "author": "StyleFreeze Contributors",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stylefreeze/stylefreeze.git"
+  }
+}
