@@ -14,7 +14,7 @@ use stylefreeze::lang::SupportedLang;
 #[command(
     name = "stylefreeze",
     author = "StyleFreeze Contributors",
-    version = "0.3.1",
+    version = "0.4.0",
     about = "AST-level surgical diff enforcer & token churn shield for AI coding agents",
     long_about = "StyleFreeze intercepts AI file modifications and strips unsolicited formatting, \
                   indentation, and cosmetic churn at the AST level, ensuring minimal diffs and \
@@ -47,6 +47,25 @@ enum Commands {
         /// Automatically fix and reconcile files in-place
         #[arg(long, short = 'f')]
         fix: bool,
+    },
+
+    /// Display visual surgical breakdown of churn vs applied logic for modified or staged files
+    Diff {
+        /// Target file to inspect
+        #[arg(value_name = "FILE")]
+        file: Option<PathBuf>,
+
+        /// Path to separate candidate file
+        #[arg(long, short = 'n', value_name = "CANDIDATE")]
+        new_file: Option<PathBuf>,
+
+        /// Inspect git staged files
+        #[arg(long, short = 's')]
+        staged: bool,
+
+        /// Target repository directory (default: current directory)
+        #[arg(long, short = 'r', default_value = ".")]
+        repo: PathBuf,
     },
 
     /// Filter a modified file or stdin, reverting non-semantic AST churn
@@ -125,6 +144,12 @@ fn main() -> Result<()> {
     match cli.command {
         Commands::Init { repo } => handle_init(&repo),
         Commands::Check { repo, staged, fix } => handle_check(&repo, staged, fix),
+        Commands::Diff {
+            file,
+            new_file,
+            staged,
+            repo,
+        } => handle_diff(&repo, file, new_file, staged),
         Commands::Filter {
             file,
             new_file,
@@ -229,6 +254,151 @@ fn handle_check(repo: &Path, staged: bool, fix: bool) -> Result<()> {
         );
         std::process::exit(1);
     }
+}
+
+fn handle_diff(
+    repo: &Path,
+    file_opt: Option<PathBuf>,
+    new_file_opt: Option<PathBuf>,
+    staged: bool,
+) -> Result<()> {
+    let abs_repo = fs::canonicalize(repo).unwrap_or_else(|_| repo.to_path_buf());
+
+    // Case 1: Two explicit files provided (original and candidate)
+    if let (Some(orig_path), Some(cand_path)) = (&file_opt, &new_file_opt) {
+        let orig = fs::read_to_string(orig_path)
+            .with_context(|| format!("Failed to read original file: {}", orig_path.display()))?;
+        let cand = fs::read_to_string(cand_path)
+            .with_context(|| format!("Failed to read candidate file: {}", cand_path.display()))?;
+        let lang = SupportedLang::from_path(orig_path)
+            .or_else(|| SupportedLang::from_path(cand_path))
+            .unwrap_or(SupportedLang::TypeScript);
+
+        let engine = SurgicalEngine::new(lang);
+        let (reconciled, _) = engine.reconcile(&orig, &cand);
+        print!("{}", engine.render_visual_diff(&orig, &cand, &reconciled));
+        return Ok(());
+    }
+
+    // Case 2: Single file provided (compare git HEAD with working tree / staged)
+    if let Some(target_file) = &file_opt {
+        let abs_file = if target_file.is_absolute() {
+            target_file.clone()
+        } else {
+            abs_repo.join(target_file)
+        };
+
+        let rel_path = abs_file.strip_prefix(&abs_repo).unwrap_or(&abs_file);
+        let rel_posix = rel_path.to_string_lossy().replace('\\', "/");
+
+        let output = Command::new("git")
+            .args(["show", &format!("HEAD:{}", rel_posix)])
+            .current_dir(&abs_repo)
+            .output()
+            .with_context(|| format!("Failed to read git HEAD for {}", rel_posix))?;
+
+        if !output.status.success() {
+            anyhow::bail!("File is not tracked in git HEAD: {}", rel_posix);
+        }
+
+        let orig = String::from_utf8_lossy(&output.stdout).to_string();
+        let cand = if staged {
+            let staged_output = Command::new("git")
+                .args(["show", &format!(":{}", rel_posix)])
+                .current_dir(&abs_repo)
+                .output()?;
+            String::from_utf8_lossy(&staged_output.stdout).to_string()
+        } else {
+            fs::read_to_string(&abs_file)?
+        };
+
+        let lang = SupportedLang::from_path(&abs_file).unwrap_or(SupportedLang::TypeScript);
+        let engine = SurgicalEngine::new(lang);
+        let (reconciled, _) = engine.reconcile(&orig, &cand);
+        print!("{}", engine.render_visual_diff(&orig, &cand, &reconciled));
+        return Ok(());
+    }
+
+    // Case 3: Repo-wide visual diff for modified or staged files
+    let status_out = Command::new("git")
+        .args(["status", "--porcelain"])
+        .current_dir(&abs_repo)
+        .output()
+        .context("Failed to run git status")?;
+
+    let stdout_str = String::from_utf8_lossy(&status_out.stdout);
+    let mut files_diffed = 0usize;
+
+    for line in stdout_str.lines() {
+        if line.len() < 3 {
+            continue;
+        }
+        let index_status = line.as_bytes()[0];
+        let worktree_status = line.as_bytes()[1];
+        let path_str = line[3..].trim();
+
+        let is_target = if staged {
+            index_status != b' ' && index_status != b'?'
+        } else {
+            worktree_status == b'M' || index_status == b'M'
+        };
+
+        if !is_target {
+            continue;
+        }
+
+        let file_path = abs_repo.join(path_str);
+        let lang = match SupportedLang::from_path(&file_path) {
+            Some(l) => l,
+            None => continue,
+        };
+
+        let rel_posix = path_str.replace('\\', "/");
+        let head_out = Command::new("git")
+            .args(["show", &format!("HEAD:{}", rel_posix)])
+            .current_dir(&abs_repo)
+            .output();
+
+        let orig = match head_out {
+            Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+            _ => continue,
+        };
+
+        let cand = if staged {
+            let s_out = Command::new("git")
+                .args(["show", &format!(":{}", rel_posix)])
+                .current_dir(&abs_repo)
+                .output();
+            match s_out {
+                Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).to_string(),
+                _ => continue,
+            }
+        } else {
+            match fs::read_to_string(&file_path) {
+                Ok(c) => c,
+                Err(_) => continue,
+            }
+        };
+
+        if orig == cand {
+            continue;
+        }
+
+        println!("\n{} {}", "File:".bold(), rel_posix.bright_yellow().bold());
+        let engine = SurgicalEngine::new(lang);
+        let (reconciled, _) = engine.reconcile(&orig, &cand);
+        print!("{}", engine.render_visual_diff(&orig, &cand, &reconciled));
+        files_diffed += 1;
+    }
+
+    if files_diffed == 0 {
+        println!(
+            "{} No modified files with formatting churn detected.",
+            "[OK]".bright_green().bold()
+        );
+    }
+
+    Ok(())
 }
 
 fn handle_filter(

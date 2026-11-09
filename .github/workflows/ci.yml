@@ -42,6 +42,6 @@ jobs:
         with:
           script-path: install.sh
           matrix: "debian:12-slim,ubuntu:22.04,ubuntu:24.04,alpine:3.20"
-          packages: "curl,tar"
+          packages: "curl,tar,ca-certificates"
           format: markdown
           shell: posix

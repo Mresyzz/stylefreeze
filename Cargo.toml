@@ -1,6 +1,6 @@
 [package]
 name = "stylefreeze"
-version = "0.3.1"
+version = "0.4.0"
 edition = "2024"
 authors = ["StyleFreeze Contributors <contributors@stylefreeze.dev>"]
 description = "AST-level surgical diff enforcer & token churn shield for AI coding agents"

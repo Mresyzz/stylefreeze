@@ -1,6 +1,7 @@
 use crate::ast::are_nodes_semantically_equivalent;
 use crate::lang::SupportedLang;
 use similar::{ChangeTag, DiffOp, TextDiff};
+use std::collections::HashSet;
 use tree_sitter::Parser;
 
 #[derive(Debug, Clone, Default)]
@@ -37,6 +38,10 @@ impl SurgicalEngine {
             );
         }
 
+        let (candidate_buf, import_churn) =
+            reconcile_import_header(self.lang, original, candidate);
+        let candidate = candidate_buf.as_str();
+
         let mut parser = Parser::new();
         let ts_lang = self.lang.to_tree_sitter_language();
         if parser.set_language(&ts_lang).is_err() {
@@ -62,7 +67,7 @@ impl SurgicalEngine {
 
         let mut raw_added = 0usize;
         let mut raw_removed = 0usize;
-        let mut discarded_churn = 0usize;
+        let mut discarded_churn = import_churn;
 
         for change in diff.iter_all_changes() {
             match change.tag() {
@@ -143,6 +148,13 @@ impl SurgicalEngine {
                     if is_hunk_equivalent {
                         for l in &orig_slice {
                             reconciled_lines.push(l.to_string());
+                        }
+                        discarded_churn += old_len + new_len;
+                    } else if let Some(import_reconciled) =
+                        try_reconcile_import_block(self.lang, &orig_slice, &cand_slice)
+                    {
+                        for l in import_reconciled {
+                            reconciled_lines.push(l);
                         }
                         discarded_churn += old_len + new_len;
                     } else if old_len == new_len {
@@ -348,6 +360,186 @@ impl SurgicalEngine {
 fn is_comment_line(line: &str) -> bool {
     let t = line.trim_start();
     t.starts_with("//") || t.starts_with("/*") || t.starts_with('*') || t.starts_with('#')
+}
+
+fn is_import_or_include_line(lang: SupportedLang, line: &str) -> bool {
+    let t = line.trim();
+    if t.is_empty() || is_comment_line(t) {
+        return false;
+    }
+
+    match lang {
+        SupportedLang::TypeScript | SupportedLang::JavaScript | SupportedLang::Tsx => {
+            t.starts_with("import ")
+                || t.starts_with("import{")
+                || t.starts_with("import*")
+                || t.starts_with("import(")
+                || (t.starts_with("export ") && t.contains(" from "))
+                || ((t.starts_with("const ") || t.starts_with("let ") || t.starts_with("var "))
+                    && t.contains("require("))
+        }
+        SupportedLang::Python => {
+            t.starts_with("import ") || (t.starts_with("from ") && t.contains(" import "))
+        }
+        SupportedLang::Rust => {
+            t.starts_with("use ") && t.ends_with(';')
+        }
+        SupportedLang::Go => {
+            t.starts_with("import ") || (t.starts_with('"') && t.ends_with('"'))
+        }
+        SupportedLang::C | SupportedLang::Cpp => {
+            t.starts_with("#include")
+        }
+        SupportedLang::Json => false,
+    }
+}
+
+fn normalize_import_key(line: &str) -> String {
+    let mut s = line.trim().trim_end_matches(';').trim().to_string();
+    s = s.replace('"', "'");
+    let words: Vec<&str> = s.split_whitespace().collect();
+    words.join(" ")
+}
+
+fn find_import_header_boundary(lang: SupportedLang, lines: &[&str]) -> Option<usize> {
+    let mut last_import_line_idx = None;
+
+    for (idx, line) in lines.iter().enumerate() {
+        let t = line.trim();
+        if t.is_empty() || is_comment_line(t) {
+            continue;
+        }
+
+        if is_import_or_include_line(lang, t) {
+            last_import_line_idx = Some(idx);
+        } else {
+            break;
+        }
+    }
+
+    last_import_line_idx.map(|idx| idx + 1)
+}
+
+fn reconcile_import_header(
+    lang: SupportedLang,
+    original: &str,
+    candidate: &str,
+) -> (String, usize) {
+    if lang == SupportedLang::Json {
+        return (candidate.to_string(), 0);
+    }
+
+    let orig_lines: Vec<&str> = original.lines().collect();
+    let cand_lines: Vec<&str> = candidate.lines().collect();
+
+    let orig_boundary = match find_import_header_boundary(lang, &orig_lines) {
+        Some(b) => b,
+        None => return (candidate.to_string(), 0),
+    };
+    let cand_boundary = match find_import_header_boundary(lang, &cand_lines) {
+        Some(b) => b,
+        None => return (candidate.to_string(), 0),
+    };
+
+    let orig_header = &orig_lines[..orig_boundary];
+    let cand_header = &cand_lines[..cand_boundary];
+
+    let orig_active: Vec<&str> = orig_header
+        .iter()
+        .copied()
+        .filter(|l| is_import_or_include_line(lang, l))
+        .collect();
+    let cand_active: Vec<&str> = cand_header
+        .iter()
+        .copied()
+        .filter(|l| is_import_or_include_line(lang, l))
+        .collect();
+
+    let orig_keys: HashSet<String> = orig_active.iter().map(|l| normalize_import_key(l)).collect();
+    let cand_keys: HashSet<String> = cand_active.iter().map(|l| normalize_import_key(l)).collect();
+
+    if orig_keys == cand_keys {
+        let mut new_lines: Vec<&str> = Vec::new();
+        new_lines.extend_from_slice(orig_header);
+        new_lines.extend_from_slice(&cand_lines[cand_boundary..]);
+        let joined = new_lines.join("\n");
+        let result = if candidate.ends_with('\n') {
+            joined + "\n"
+        } else {
+            joined
+        };
+        return (result, cand_header.len() + orig_header.len());
+    }
+
+    if orig_keys.is_subset(&cand_keys) {
+        let mut new_lines: Vec<String> = orig_header.iter().map(|l| l.to_string()).collect();
+        for cand_line in &cand_active {
+            let key = normalize_import_key(cand_line);
+            if !orig_keys.contains(&key) {
+                new_lines.push(cand_line.to_string());
+            }
+        }
+        for remaining in &cand_lines[cand_boundary..] {
+            new_lines.push(remaining.to_string());
+        }
+        let joined = new_lines.join("\n");
+        let result = if candidate.ends_with('\n') {
+            joined + "\n"
+        } else {
+            joined
+        };
+        return (result, cand_header.len());
+    }
+
+    (candidate.to_string(), 0)
+}
+
+fn try_reconcile_import_block(
+    lang: SupportedLang,
+    orig_slice: &[&str],
+    cand_slice: &[&str],
+) -> Option<Vec<String>> {
+    let orig_active: Vec<&str> = orig_slice
+        .iter()
+        .copied()
+        .filter(|l| !l.trim().is_empty() && !is_comment_line(l))
+        .collect();
+    let cand_active: Vec<&str> = cand_slice
+        .iter()
+        .copied()
+        .filter(|l| !l.trim().is_empty() && !is_comment_line(l))
+        .collect();
+
+    if orig_active.is_empty() || cand_active.is_empty() {
+        return None;
+    }
+
+    if !orig_active.iter().all(|l| is_import_or_include_line(lang, l)) {
+        return None;
+    }
+    if !cand_active.iter().all(|l| is_import_or_include_line(lang, l)) {
+        return None;
+    }
+
+    let orig_keys: HashSet<String> = orig_active.iter().map(|l| normalize_import_key(l)).collect();
+    let cand_keys: HashSet<String> = cand_active.iter().map(|l| normalize_import_key(l)).collect();
+
+    if orig_keys == cand_keys {
+        return Some(orig_slice.iter().map(|s| s.to_string()).collect());
+    }
+
+    if orig_keys.is_subset(&cand_keys) {
+        let mut result: Vec<String> = orig_slice.iter().map(|s| s.to_string()).collect();
+        for cand_line in &cand_active {
+            let key = normalize_import_key(cand_line);
+            if !orig_keys.contains(&key) {
+                result.push(cand_line.to_string());
+            }
+        }
+        return Some(result);
+    }
+
+    None
 }
 
 fn are_lines_semantically_equivalent(
@@ -676,6 +868,96 @@ namespace core {
         println!("C++ Result:\n{}", result);
         assert!(result.contains("id < 0"));
         assert!(result.contains("// Check session ID positive"));
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_import_shield_prevents_reordering_churn() {
+        let original = r#"import { z } from "./z";
+import { a } from "./a";
+import { m } from "./m";
+
+export function run() {
+    return 42;
+}
+"#;
+
+        // Candidate shuffled imports alphabetically and used single quotes
+        let candidate = r#"import { a } from './a';
+import { m } from './m';
+import { z } from './z';
+
+export function run() {
+    return 42;
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::TypeScript);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("Reconciled TS Imports:\n{}", result);
+        assert_eq!(result.trim(), original.trim());
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_import_shield_appends_new_import_preserving_order() {
+        let original = r#"import { z } from "./z";
+import { a } from "./a";
+
+export function run() {
+    return 42;
+}
+"#;
+
+        // Candidate shuffled existing and inserted new import
+        let candidate = r#"import { a } from "./a";
+import { newlyAdded } from "./new";
+import { z } from "./z";
+
+export function run() {
+    return 42;
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::TypeScript);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("Appended TS Imports:\n{}", result);
+        // Original order preserved: z, then a
+        let idx_z = result.find("from \"./z\"").unwrap();
+        let idx_a = result.find("from \"./a\"").unwrap();
+        let idx_new = result.find("from \"./new\"").unwrap();
+
+        assert!(idx_z < idx_a);
+        assert!(idx_a < idx_new);
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_python_import_shield_preserves_custom_grouping() {
+        let original = r#"import sys
+import os
+
+from collections import defaultdict
+
+def execute():
+    pass
+"#;
+
+        let candidate = r#"from collections import defaultdict
+import os
+import sys
+
+def execute():
+    pass
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::Python);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("Python Reconciled Imports:\n{}", result);
+        assert_eq!(result.trim(), original.trim());
         assert!(stats.discarded_churn_lines > 0);
     }
 }

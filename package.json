@@ -1,6 +1,6 @@
 {
   "name": "stylefreeze",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "description": "Stop paying Opus to reformat your files. AST-level surgical diff enforcer for Claude Code, Codex, and Cursor.",
   "main": "bin/stylefreeze.js",
   "bin": {

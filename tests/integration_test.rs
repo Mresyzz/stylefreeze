@@ -79,3 +79,37 @@ fn test_check_on_clean_repo() {
         assert_eq!(results.len(), 0);
     }
 }
+
+#[test]
+fn test_import_shield_and_visual_diff_integration() {
+    let original = r#"import { z } from "./z";
+import { a } from "./a";
+
+export function add(x: number, y: number): number {
+    return x + y;
+}
+"#;
+
+    // AI reordered imports and changed logic
+    let candidate = r#"import { a } from "./a";
+import { z } from "./z";
+
+export function add(x: number, y: number): number {
+    return x + y + 1;
+}
+"#;
+
+    let engine = SurgicalEngine::new(SupportedLang::TypeScript);
+    let (reconciled, stats) = engine.reconcile(original, candidate);
+
+    // Original import order must be frozen
+    assert!(reconciled.starts_with("import { z } from \"./z\";\nimport { a } from \"./a\";"));
+    // New logic must be applied
+    assert!(reconciled.contains("return x + y + 1;"));
+    assert!(stats.discarded_churn_lines > 0);
+
+    let visual_diff = engine.render_visual_diff(original, candidate, &reconciled);
+    assert!(visual_diff.contains("Surgical Diff Breakdown"));
+    assert!(visual_diff.contains("REVERTED CHURN"));
+    assert!(visual_diff.contains("APPLIED CHANGE"));
+}

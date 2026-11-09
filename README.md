@@ -172,7 +172,26 @@ stylefreeze hook install cursor
 stylefreeze hook install git
 ```
 
-### 7. CLI & Visual Diff Breakdown
+### 7. Interactive Visual Diff
+
+Inspect what unsolicited churn would be reverted and what real logic would be kept:
+
+```bash
+# Diff working tree changes for all modified source files
+stylefreeze diff
+
+# Diff git staged changes only
+stylefreeze diff --staged
+
+# Diff a single file against git HEAD
+stylefreeze diff src/services/auth.ts
+```
+
+### 8. Import Shield (Order & Blank Line Protection)
+
+AI agents frequently re-alphabetize or re-order imports when adding a single package. StyleFreeze's Import Shield automatically freezes original import grouping and order, appending only genuine new imports to avoid 20+ lines of red/green diff churn across TypeScript, Python, Rust, Go, and C/C++.
+
+### 9. CLI Surgical Filtering
 
 ```bash
 # Filter a file against git HEAD in-place and see the visual breakdown
@@ -185,7 +204,7 @@ stylefreeze filter original.py --new-file candidate.py --in-place
 cat candidate.ts | stylefreeze filter > surgical.ts
 ```
 
-### 8. Model Context Protocol (MCP) Server
+### 10. Model Context Protocol (MCP) Server
 
 StyleFreeze can run as a standard stdio MCP tool server:
 
