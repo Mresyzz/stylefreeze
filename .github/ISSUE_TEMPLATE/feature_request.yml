@@ -1,0 +1,21 @@
+name: Feature Request
+description: Propose a new feature, hook integration, or language grammar
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: Please describe the feature you would like to see in StyleFreeze.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem Statement
+      description: What limitation or pain point are you encountering?
+    validations:
+      required: true
+  - type: textarea
+    id: proposed_solution
+    attributes:
+      label: Proposed Solution
+      description: How should StyleFreeze address this problem?
+    validations:
+      required: true

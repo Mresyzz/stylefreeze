@@ -1,0 +1,36 @@
+name: Bug Report
+description: Report a bug or incorrect diff filtering in StyleFreeze
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Thanks for filing a bug report. Please describe the issue clearly.
+  - type: input
+    id: version
+    attributes:
+      label: StyleFreeze Version
+      description: Run `stylefreeze --version`
+      placeholder: "0.2.0"
+    validations:
+      required: true
+  - type: textarea
+    id: original_code
+    attributes:
+      label: Original Code
+      description: The code before the AI edit
+    validations:
+      required: true
+  - type: textarea
+    id: candidate_code
+    attributes:
+      label: Candidate Code from AI
+      description: The raw code proposed by the LLM
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs Actual Behavior
+      description: What did StyleFreeze do vs what it should have done?
+    validations:
+      required: true

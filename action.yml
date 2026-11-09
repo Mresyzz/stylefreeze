@@ -1,0 +1,76 @@
+name: 'StyleFreeze PR Shield'
+description: 'AST-level surgical diff enforcer. Audit token waste and formatting churn in Pull Requests.'
+author: 'Mresyzz'
+branding:
+  icon: 'shield'
+  color: 'blue'
+
+inputs:
+  depth:
+    description: 'Number of commits to inspect'
+    required: false
+    default: '20'
+  comment-pr:
+    description: 'Post audit report as a PR comment'
+    required: false
+    default: 'true'
+  github-token:
+    description: 'GitHub token for posting PR comments'
+    required: false
+    default: ${{ github.token }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Download StyleFreeze binary
+      shell: bash
+      run: |
+        OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        ARCH="$(uname -m)"
+        case "$OS" in
+          linux)
+            ASSET="stylefreeze-x86_64-unknown-linux-gnu.tar.gz"
+            ;;
+          darwin)
+            if [ "$ARCH" = "arm64" ]; then
+              ASSET="stylefreeze-aarch64-apple-darwin.tar.gz"
+            else
+              ASSET="stylefreeze-x86_64-apple-darwin.tar.gz"
+            fi
+            ;;
+          *)
+            echo "Unsupported OS: $OS"
+            exit 1
+            ;;
+        esac
+
+        curl -sSL -o stylefreeze.tar.gz "https://github.com/Mresyzz/stylefreeze/releases/latest/download/$ASSET"
+        tar -xzf stylefreeze.tar.gz
+        chmod +x stylefreeze
+        sudo mv stylefreeze /usr/local/bin/
+
+    - name: Run StyleFreeze Audit
+      id: audit
+      shell: bash
+      run: |
+        REPORT=$(stylefreeze audit-git --depth ${{ inputs.depth }} --pr)
+        echo "report<<EOF" >> $GITHUB_OUTPUT
+        echo "$REPORT" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+
+    - name: Post PR Comment
+      if: inputs.comment-pr == 'true' && github.event_name == 'pull_request'
+      uses: actions/github-script@v7
+      with:
+        github-token: ${{ inputs.github-token }}
+        script: |
+          const report = `${{ steps.audit.outputs.report }}`;
+          const issue_number = context.issue.number;
+          if (issue_number) {
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issue_number,
+              body: report
+            });
+          }

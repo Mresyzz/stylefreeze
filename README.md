@@ -3,7 +3,13 @@
 > **Stop paying Opus to reformat your files.**  
 > AST-level surgical diff enforcer for Claude Code, Codex, and Cursor.
 
-```
+[![CI](https://github.com/Mresyzz/stylefreeze/actions/workflows/ci.yml/badge.svg)](https://github.com/Mresyzz/stylefreeze/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Mresyzz/stylefreeze?color=blue)](https://github.com/Mresyzz/stylefreeze/releases)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Latency: Sub-3ms](https://img.shields.io/badge/Latency-%3C3ms-brightgreen.svg)]()
+[![Languages](https://img.shields.io/badge/Languages-TS%20%7C%20JS%20%7C%20Python%20%7C%20Rust%20%7C%20Go-orange.svg)]()
+
+```text
 ======================================================================
                     STYLEFREEZE AUDIT RECEIPT
              "Stop paying Opus to reformat your files"
@@ -48,24 +54,24 @@ Asking the model nicely in prose (`CLAUDE.md`, system prompts) fails ~10% of the
 
 StyleFreeze sits between the LLM's file write call and your disk.
 
-```
+```text
  [AI Agent Edit Action]
-           │
-           ▼
- ┌──────────────────┐
- │  StyleFreeze AST │ ── tree-sitter parses original vs. candidate
- └──────────────────┘
-           │
-     ┌─────┴────────────────────────┐
-     ▼                              ▼
+           |
+           v
+ +------------------+
+ |  StyleFreeze AST | -- tree-sitter parses original vs. candidate
+ +------------------+
+           |
+     +-----+------------------------+
+     v                              v
 [Semantic Changes]         [Formatting & Quote Churn]
-     │                              │
-     ▼                              ▼
+     |                              |
+     v                              v
  Preserved & Applied        Reverted to Original Syntax
-           │                              │
-           └──────────────┬───────────────┘
-                          │
-                          ▼
+           |                              |
+           +--------------+---------------+
+                          |
+                          v
             [Surgical Git Diff Written]
 ```
 
@@ -76,6 +82,32 @@ StyleFreeze sits between the LLM's file write call and your disk.
 
 ---
 
+## Installation
+
+### One-Line Install (Prebuilt Binaries)
+
+**Linux & macOS:**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Mresyzz/stylefreeze/main/install.sh | sh
+```
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Mresyzz/stylefreeze/main/install.ps1 | iex
+```
+
+### Via Cargo
+```bash
+cargo install stylefreeze
+```
+
+### Via NPM / NPX
+```bash
+npx stylefreeze audit-git
+```
+
+---
+
 ## Quick Start
 
 ### 1. Audit your repo's wasted tokens (Read-Only)
@@ -83,7 +115,7 @@ StyleFreeze sits between the LLM's file write call and your disk.
 See how much money and token context your coding agents have burned on formatting churn across your recent commits:
 
 ```bash
-npx stylefreeze audit-git
+stylefreeze audit-git
 ```
 
 Or generate a clean Markdown table for your GitHub Pull Request comments:
@@ -137,7 +169,33 @@ StyleFreeze can run as a standard stdio MCP tool server:
 stylefreeze mcp
 ```
 
-Exposes `stylefreeze_reconcile` for autonomous multi-agent tool loops.
+Exposes `stylefreeze_reconcile` for autonomous multi-agent tool loops in Windsurf, Cursor, Zed, and Claude Desktop.
+
+---
+
+## GitHub Actions Integration
+
+Add StyleFreeze as a Pull Request audit shield to automatically post token waste savings on incoming PRs:
+
+```yaml
+name: StyleFreeze Audit
+
+on:
+  pull_request:
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: StyleFreeze PR Shield
+        uses: Mresyzz/stylefreeze@v0.2.0
+```
 
 ---
 
@@ -151,7 +209,7 @@ Benchmarked on varying TypeScript codebases with simulated AI cosmetic reformatt
 | **1,200 lines** | **99.5%** | **12.32 ms** |
 | **3,000 lines** | **99.8%** | **44.34 ms** |
 
-*Measured on Rust `1.99.1` with native `tree-sitter` AST traversal.*
+*Measured on Rust 1.85+ with native `tree-sitter` AST traversal.*
 
 ---
 
