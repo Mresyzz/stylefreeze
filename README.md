@@ -118,7 +118,22 @@ Run `stylefreeze init` in any repository to automatically generate `stylefreeze.
 stylefreeze init
 ```
 
-### 2. Audit your repo's wasted tokens (Read-Only)
+### 2. CI Gate & Working Tree Check
+
+Inspect modified files in the working tree or staged changes, and automatically sanitize them:
+
+```bash
+# Check working tree (exits with code 1 if unsolicited churn is found)
+stylefreeze check
+
+# Check staged files only
+stylefreeze check --staged
+
+# Automatically reconcile and fix files in-place
+stylefreeze check --fix
+```
+
+### 3. Audit your repo's wasted tokens (Read-Only)
 
 See how much money and token context your coding agents have burned on formatting churn across your recent commits:
 
@@ -132,7 +147,7 @@ Or generate a clean Markdown table for your GitHub Pull Request comments:
 stylefreeze audit-git --pr
 ```
 
-### 3. Protect Claude Code
+### 4. Protect Claude Code
 
 Automatically sanitize every `Edit` or `Write` tool call before it touches disk:
 
@@ -142,7 +157,7 @@ stylefreeze hook install claude
 
 This writes a `PreToolUse` hook to `.claude/hooks.json`.
 
-### 4. Protect Cursor
+### 5. Protect Cursor
 
 Configure Cursor rules and connect StyleFreeze as an MCP server:
 
@@ -150,13 +165,13 @@ Configure Cursor rules and connect StyleFreeze as an MCP server:
 stylefreeze hook install cursor
 ```
 
-### 5. Protect via Git pre-commit
+### 6. Protect via Git pre-commit
 
 ```bash
 stylefreeze hook install git
 ```
 
-### 6. CLI & Visual Diff Breakdown
+### 7. CLI & Visual Diff Breakdown
 
 ```bash
 # Filter a file against git HEAD in-place and see the visual breakdown
@@ -169,7 +184,7 @@ stylefreeze filter original.py --new-file candidate.py --in-place
 cat candidate.ts | stylefreeze filter > surgical.ts
 ```
 
-### 7. Model Context Protocol (MCP) Server
+### 8. Model Context Protocol (MCP) Server
 
 StyleFreeze can run as a standard stdio MCP tool server:
 
@@ -228,6 +243,7 @@ Benchmarked on varying TypeScript codebases with simulated AI cosmetic reformatt
 - **Python** (`.py`, `.pyi`)
 - **Rust** (`.rs`)
 - **Go** (`.go`)
+- **JSON / JSONC** (`.json`, `.jsonc`)
 
 ---
 

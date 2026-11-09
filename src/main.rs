@@ -14,7 +14,7 @@ use stylefreeze::lang::SupportedLang;
 #[command(
     name = "stylefreeze",
     author = "StyleFreeze Contributors",
-    version = "0.2.0",
+    version = "0.3.0",
     about = "AST-level surgical diff enforcer & token churn shield for AI coding agents",
     long_about = "StyleFreeze intercepts AI file modifications and strips unsolicited formatting, \
                   indentation, and cosmetic churn at the AST level, ensuring minimal diffs and \
@@ -32,6 +32,21 @@ enum Commands {
         /// Target repository directory (default: current directory)
         #[arg(long, short = 'r', default_value = ".")]
         repo: PathBuf,
+    },
+
+    /// Check working tree or staged files for unsolicited formatting churn
+    Check {
+        /// Target repository directory (default: current directory)
+        #[arg(long, short = 'r', default_value = ".")]
+        repo: PathBuf,
+
+        /// Only inspect git staged files
+        #[arg(long, short = 's')]
+        staged: bool,
+
+        /// Automatically fix and reconcile files in-place
+        #[arg(long, short = 'f')]
+        fix: bool,
     },
 
     /// Filter a modified file or stdin, reverting non-semantic AST churn
@@ -105,6 +120,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Commands::Init { repo } => handle_init(&repo),
+        Commands::Check { repo, staged, fix } => handle_check(&repo, staged, fix),
         Commands::Filter {
             file,
             new_file,
@@ -162,6 +178,52 @@ fn handle_init(repo: &Path) -> Result<()> {
     );
 
     Ok(())
+}
+
+fn handle_check(repo: &Path, staged: bool, fix: bool) -> Result<()> {
+    let abs_repo = fs::canonicalize(repo).unwrap_or_else(|_| repo.to_path_buf());
+    let (results, all_clean) = stylefreeze::check::run_check(&abs_repo, staged, fix)?;
+
+    if all_clean {
+        println!(
+            "{} All inspected files are surgically clean. Zero formatting churn detected.",
+            "[OK]".bright_green().bold()
+        );
+        return Ok(());
+    }
+
+    if fix {
+        for res in &results {
+            println!(
+                " {} Fixed {} (Stripped {} lines of churn, saved ~{} tokens)",
+                "[OK]".bright_green().bold(),
+                res.file_path.display().to_string().bold(),
+                res.churn_lines.to_string().bright_yellow().bold(),
+                res.tokens_wasted.to_string().bright_green().bold()
+            );
+        }
+        println!(
+            "\n{} Successfully fixed {} file(s).",
+            "[OK]".bright_green().bold(),
+            results.len()
+        );
+        Ok(())
+    } else {
+        for res in &results {
+            println!(
+                " {} {}: {} lines of unsolicited AST churn detected (Wasted ~{} tokens)",
+                "[FAIL]".bright_red().bold(),
+                res.file_path.display().to_string().bold(),
+                res.churn_lines.to_string().bright_yellow().bold(),
+                res.tokens_wasted.to_string().bright_red().bold()
+            );
+        }
+        eprintln!(
+            "\n{} Run `stylefreeze check --fix` to automatically sanitize these files.",
+            "[TIP]".cyan().bold()
+        );
+        std::process::exit(1);
+    }
 }
 
 fn handle_filter(

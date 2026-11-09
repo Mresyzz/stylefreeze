@@ -559,4 +559,36 @@ pub fn format_id(id: u64) -> String {
         assert!(result.contains("    return false;"));
         assert!(stats.discarded_churn_lines > 0);
     }
+
+    #[test]
+    fn test_json_surgical_reconciliation() {
+        let original = r#"{
+  "name": "my-app",
+  "version": "1.0.0",
+  "scripts": {
+    "test": "cargo test"
+  }
+}
+"#;
+
+        // Candidate changed test command, but re-indented whole file to 4 spaces
+        let candidate = r#"{
+    "name": "my-app",
+    "version": "1.0.0",
+    "scripts": {
+        "test": "cargo test --all"
+    }
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::Json);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("JSON Result:\n{}", result);
+        assert!(result.contains("\"test\": \"cargo test --all\""));
+        // Name and version must retain 2 spaces
+        assert!(result.contains("  \"name\": \"my-app\""));
+        assert!(result.contains("  \"version\": \"1.0.0\""));
+        assert!(stats.discarded_churn_lines > 0);
+    }
 }
