@@ -14,7 +14,7 @@ use stylefreeze::lang::SupportedLang;
 #[command(
     name = "stylefreeze",
     author = "StyleFreeze Contributors",
-    version = "0.1.0",
+    version = "0.2.0",
     about = "AST-level surgical diff enforcer & token churn shield for AI coding agents",
     long_about = "StyleFreeze intercepts AI file modifications and strips unsolicited formatting, \
                   indentation, and cosmetic churn at the AST level, ensuring minimal diffs and \
@@ -44,6 +44,10 @@ enum Commands {
         /// Suppress terminal feedback messages
         #[arg(long, short = 'q')]
         quiet: bool,
+
+        /// Display visual breakdown of reverted churn vs applied changes
+        #[arg(long, short = 'd')]
+        diff: bool,
     },
 
     /// Scan git history to audit tokens and money burned by AI formatting churn
@@ -55,7 +59,18 @@ enum Commands {
         /// Target repository directory (default: current directory)
         #[arg(long, short = 'r', default_value = ".")]
         repo: PathBuf,
+
+        /// Output report in JSON format
+        #[arg(long)]
+        json: bool,
+
+        /// Output report in GitHub PR Markdown comment format
+        #[arg(long)]
+        pr: bool,
     },
+
+    /// Run as a Model Context Protocol (MCP) server over stdio
+    Mcp,
 
     /// Install automatic surgical hooks for coding agents or git
     Hook {
@@ -87,8 +102,15 @@ fn main() -> Result<()> {
             new_file,
             in_place,
             quiet,
-        } => handle_filter(file, new_file, in_place, quiet),
-        Commands::AuditGit { depth, repo } => handle_audit_git(&repo, depth),
+            diff,
+        } => handle_filter(file, new_file, in_place, quiet, diff),
+        Commands::AuditGit {
+            depth,
+            repo,
+            json,
+            pr,
+        } => handle_audit_git(&repo, depth, json, pr),
+        Commands::Mcp => stylefreeze::mcp::run_mcp_server(),
         Commands::Hook { action } => match action {
             HookAction::Install { target, repo } => handle_hook_install(&target, &repo),
         },
@@ -100,6 +122,7 @@ fn handle_filter(
     new_file_opt: Option<PathBuf>,
     in_place: bool,
     quiet: bool,
+    show_diff: bool,
 ) -> Result<()> {
     let (original_text, candidate_text, file_path, lang) = match (file_opt, new_file_opt) {
         // Case 1: Both original file and candidate file specified
@@ -155,7 +178,9 @@ fn handle_filter(
         io::stdout().write_all(reconciled.as_bytes())?;
     }
 
-    if !quiet && stats.discarded_churn_lines > 0 {
+    if show_diff {
+        eprintln!("{}", engine.render_visual_diff(&original_text, &candidate_text, &reconciled));
+    } else if !quiet && stats.discarded_churn_lines > 0 {
         eprintln!(
             "{} Discarded {} lines of unsolicited format churn (Saved ~{} tokens).",
             "[StyleFreeze]".bright_cyan().bold(),
@@ -167,22 +192,30 @@ fn handle_filter(
     Ok(())
 }
 
-fn handle_audit_git(repo: &Path, depth: usize) -> Result<()> {
+fn handle_audit_git(repo: &Path, depth: usize, json_output: bool, pr_output: bool) -> Result<()> {
     let abs_repo = fs::canonicalize(repo).unwrap_or_else(|_| repo.to_path_buf());
     let repo_name = abs_repo
         .file_name()
         .map(|n| n.to_string_lossy().to_string())
         .unwrap_or_else(|| "current-repo".to_string());
 
-    eprintln!(
-        "{} Scanning past {} commits in {}...",
-        "[StyleFreeze]".bright_cyan().bold(),
-        depth,
-        repo_name.bright_yellow()
-    );
+    if !json_output && !pr_output {
+        eprintln!(
+            "{} Scanning past {} commits in {}...",
+            "[StyleFreeze]".bright_cyan().bold(),
+            depth,
+            repo_name.bright_yellow()
+        );
+    }
 
     let report = run_git_audit(&abs_repo, depth)?;
-    print_receipt(&report, &repo_name);
+    if json_output {
+        println!("{}", serde_json::to_string_pretty(&report)?);
+    } else if pr_output {
+        println!("{}", stylefreeze::audit::render_pr_markdown(&report));
+    } else {
+        print_receipt(&report, &repo_name);
+    }
 
     Ok(())
 }
@@ -191,9 +224,10 @@ fn handle_hook_install(target: &str, repo: &Path) -> Result<()> {
     match target.to_lowercase().as_str() {
         "git" => install_git_hook(repo),
         "claude" | "claudecode" => install_claude_hook(repo),
+        "cursor" => stylefreeze::hook::install_cursor_hook(repo),
         other => {
             anyhow::bail!(
-                "Unsupported hook target: '{}'. Valid targets are: 'claude', 'git'",
+                "Unsupported hook target: '{}'. Valid targets are: 'claude', 'cursor', 'git'",
                 other
             );
         }

@@ -166,29 +166,50 @@ impl SurgicalEngine {
                             }
                         }
                     } else {
-                        let mut start = 0;
-                        while start < old_len
-                            && start < new_len
-                            && orig_slice[start].trim() == cand_slice[start].trim()
-                        {
-                            reconciled_lines.push(orig_slice[start].to_string());
-                            discarded_churn += 2;
-                            start += 1;
+                        let mut start_old = 0;
+                        let mut start_new = 0;
+                        while start_old < old_len && start_new < new_len {
+                            if orig_slice[start_old].trim() == cand_slice[start_new].trim()
+                                || are_lines_semantically_equivalent(
+                                    &mut parser,
+                                    orig_slice[start_old],
+                                    cand_slice[start_new],
+                                )
+                            {
+                                reconciled_lines.push(orig_slice[start_old].to_string());
+                                discarded_churn += 2;
+                                start_old += 1;
+                                start_new += 1;
+                            } else if is_comment_line(orig_slice[start_old])
+                                && !is_comment_line(cand_slice[start_new])
+                            {
+                                // AI silently stripped an original comment: preserve it!
+                                reconciled_lines.push(orig_slice[start_old].to_string());
+                                discarded_churn += 1;
+                                start_old += 1;
+                            } else {
+                                break;
+                            }
                         }
 
                         let mut end_old = old_len;
                         let mut end_new = new_len;
-                        while end_old > start
-                            && end_new > start
-                            && orig_slice[end_old - 1].trim() == cand_slice[end_new - 1].trim()
+                        while end_old > start_old
+                            && end_new > start_new
+                            && (orig_slice[end_old - 1].trim() == cand_slice[end_new - 1].trim()
+                                || are_lines_semantically_equivalent(
+                                    &mut parser,
+                                    orig_slice[end_old - 1],
+                                    cand_slice[end_new - 1],
+                                ))
                         {
                             end_old -= 1;
                             end_new -= 1;
                         }
 
-                        let middle_cand = &cand_slice[start..end_new];
-                        let base_indent = if start < orig_slice.len() {
-                            get_indentation(orig_slice[start])
+                        let middle_cand = &cand_slice[start_new..end_new];
+                        let base_indent = if start_old < orig_slice.len() {
+                            get_indentation(orig_slice[start_old])
                         } else {
                             ""
                         };
@@ -251,6 +272,52 @@ impl SurgicalEngine {
         (final_text, stats)
     }
 
+    pub fn render_visual_diff(&self, original: &str, candidate: &str, reconciled: &str) -> String {
+        use colored::*;
+        let mut out = String::new();
+        out.push_str(&format!("{}\n", "🧊 StyleFreeze Surgical Diff Breakdown:".bold().cyan()));
+        out.push_str(&format!("{}\n", "------------------------------------------------------------".dimmed()));
+
+        let diff_cand = TextDiff::from_lines(candidate, reconciled);
+        let mut churn_count = 0;
+        let mut applied_count = 0;
+
+        for change in diff_cand.iter_all_changes() {
+            match change.tag() {
+                ChangeTag::Delete => {
+                    // Lines in candidate that StyleFreeze rejected
+                    churn_count += 1;
+                    out.push_str(&format!(" {} {}", "[-] REVERTED CHURN:".bright_red().bold(), change.value().trim_end()));
+                    out.push('\n');
+                }
+                _ => {}
+            }
+        }
+
+        let diff_orig = TextDiff::from_lines(original, reconciled);
+        for change in diff_orig.iter_all_changes() {
+            match change.tag() {
+                ChangeTag::Insert => {
+                    // Lines actually applied to original
+                    applied_count += 1;
+                    out.push_str(&format!(" {} {}", "[+] APPLIED CHANGE:".bright_green().bold(), change.value().trim_end()));
+                    out.push('\n');
+                }
+                _ => {}
+            }
+        }
+
+        out.push_str(&format!("{}\n", "------------------------------------------------------------".dimmed()));
+        out.push_str(&format!(
+            " {} {} lines of churn frozen, {} lines of logic applied.\n",
+            "✔".bright_green().bold(),
+            churn_count.to_string().bright_yellow().bold(),
+            applied_count.to_string().bright_green().bold()
+        ));
+
+        out
+    }
+
     fn fallback_stats(&self, original: &str, candidate: &str) -> (String, SurgicalStats) {
         let diff = TextDiff::from_lines(original, candidate);
         let mut added = 0;
@@ -276,6 +343,11 @@ impl SurgicalEngine {
             },
         )
     }
+}
+
+fn is_comment_line(line: &str) -> bool {
+    let t = line.trim_start();
+    t.starts_with("//") || t.starts_with("/*") || t.starts_with('*') || t.starts_with('#')
 }
 
 fn are_lines_semantically_equivalent(
@@ -402,6 +474,89 @@ def format_greeting(name: str) -> str:
 
         assert!(result.contains("score >= 90:"));
         assert!(result.contains("    return f\"Hello, {name}!\""));
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_rust_surgical_reconciliation() {
+        let original = r#"pub fn process_order(id: u64, amount: f64) -> bool {
+    // Audit threshold
+    if amount > 1000.0 {
+        return false;
+    }
+    true
+}
+
+pub fn format_id(id: u64) -> String {
+    format!("ID: {}", id)
+}
+"#;
+
+        let candidate = r#"pub fn process_order(id: u64, amount: f64) -> bool {
+  if amount > 5000.0 {
+    return false;
+  }
+  true
+}
+
+pub fn format_id(id: u64) -> String {
+  format!("ID: {}", id)
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::Rust);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("Rust Result:\n{}", result);
+        assert!(result.contains("amount > 5000.0"));
+        // format_id must retain 4 spaces
+        assert!(result.contains("    format!(\"ID: {}\", id)"));
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_go_surgical_reconciliation_preserves_tabs() {
+        let original = "package main\n\nfunc CalculateTax(income float64) float64 {\n\tif income > 50000 {\n\t\treturn income * 0.2\n\t}\n\treturn income * 0.1\n}\n\nfunc Version() string {\n\treturn \"v1.0\"\n}\n";
+
+        // AI converted tabs to 2 spaces and changed tax to 0.25
+        let candidate = "package main\n\nfunc CalculateTax(income float64) float64 {\n  if income > 50000 {\n    return income * 0.25\n  }\n  return income * 0.1\n}\n\nfunc Version() string {\n  return \"v1.0\"\n}\n";
+
+        let engine = SurgicalEngine::new(SupportedLang::Go);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("Go Result:\n{}", result);
+        assert!(result.contains("income * 0.25"));
+        // Version must preserve tab indentation
+        assert!(result.contains("\treturn \"v1.0\""));
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_unsolicited_comment_deletion_is_prevented() {
+        let original = r#"export function validateEmail(email: string): boolean {
+    // Validate email structure
+    if (!email.includes("@")) {
+        return false;
+    }
+    return true;
+}
+"#;
+
+        let candidate = r#"export function validateEmail(email: string): boolean {
+  if (!email.includes("@") || email.length < 5) {
+    return false;
+  }
+  return true;
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::TypeScript);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("Result:\n{}", result);
+        assert!(result.contains("// Validate email structure"));
+        assert!(result.contains("email.length < 5"));
+        assert!(result.contains("    return false;"));
         assert!(stats.discarded_churn_lines > 0);
     }
 }

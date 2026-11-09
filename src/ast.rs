@@ -1,7 +1,10 @@
 use tree_sitter::Node;
 
 fn is_ignorable(kind: &str) -> bool {
-    matches!(kind, ";" | "comment" | "\"" | "'")
+    matches!(
+        kind,
+        ";" | "comment" | "line_comment" | "block_comment" | "\"" | "'" | "`"
+    )
 }
 
 fn normalize_string_literal(raw: &str) -> &str {

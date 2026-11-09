@@ -4,7 +4,7 @@ use colored::*;
 use std::path::Path;
 use std::process::Command;
 
-#[derive(Debug, Default)]
+#[derive(Debug, Default, serde::Serialize)]
 pub struct AuditReport {
     pub commits_analyzed: usize,
     pub files_inspected: usize,
@@ -106,6 +106,34 @@ pub fn run_git_audit(repo_dir: &Path, depth: usize) -> anyhow::Result<AuditRepor
     report.contaminated_files_count = contaminated_files.len();
 
     Ok(report)
+}
+
+pub fn render_pr_markdown(report: &AuditReport) -> String {
+    let waste_percentage = if report.total_raw_diff_lines > 0 {
+        (report.total_churn_lines as f64 / report.total_raw_diff_lines as f64) * 100.0
+    } else {
+        0.0
+    };
+    let cost_usd = (report.estimated_tokens_wasted as f64) * 0.000075;
+
+    format!(
+        "### 🧊 StyleFreeze Surgical Audit Report\n\n\
+         > **Stop paying Opus to reformat your files.**\n\n\
+         | Metric | Measurement |\n\
+         | :--- | :--- |\n\
+         | 📄 **Files Inspected** | `{}` |\n\
+         | ✂️ **Pure AST Churn Stripped** | `{} lines` ({:.1}% of diff) |\n\
+         | 💸 **Estimated Token Context Saved** | `~{} tokens` |\n\
+         | 💰 **Estimated Bill Saved** | `${:.2} USD` |\n\
+         | 🧼 **Blame Contamination Avoided** | `{} files` |\n\n\
+         *Protected by [StyleFreeze](https://github.com/stylefreeze/stylefreeze)*\n",
+        report.files_inspected,
+        report.total_churn_lines,
+        waste_percentage,
+        report.estimated_tokens_wasted,
+        cost_usd,
+        report.contaminated_files_count
+    )
 }
 
 pub fn print_receipt(report: &AuditReport, repo_name: &str) {
