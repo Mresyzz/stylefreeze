@@ -97,7 +97,7 @@ if [ ! -s "$TMP_DIR/stylefreeze.tar.gz" ]; then
   exit 1
 fi
 
-tar -xzf "$TMP_DIR/stylefreeze.tar.gz" -C "$TMP_DIR"
+tar --no-same-owner -xzf "$TMP_DIR/stylefreeze.tar.gz" -C "$TMP_DIR" 2>/dev/null || tar -xzf "$TMP_DIR/stylefreeze.tar.gz" -C "$TMP_DIR"
 
 if [ ! -f "$TMP_DIR/stylefreeze" ]; then
   echo "[ERROR] Extracted archive did not contain the stylefreeze binary."
