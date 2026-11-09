@@ -25,7 +25,7 @@ case "$OS" in
     ;;
 esac
 
-TARGET_DIR="${HOME}/.local/bin"
+TARGET_DIR="${HOME:-/root}/.local/bin"
 mkdir -p "$TARGET_DIR"
 
 URL="https://github.com/${REPO}/releases/latest/download/${ASSET}"
@@ -34,10 +34,19 @@ echo "[INFO] Downloading StyleFreeze from $URL..."
 TMP_DIR="$(mktemp -d)"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-curl -sSL "$URL" -o "$TMP_DIR/stylefreeze.tar.gz"
+if command -v curl >/dev/null 2>&1; then
+  curl -sSL "$URL" -o "$TMP_DIR/stylefreeze.tar.gz"
+elif command -v wget >/dev/null 2>&1; then
+  wget -qO "$TMP_DIR/stylefreeze.tar.gz" "$URL"
+else
+  echo "[ERROR] Neither curl nor wget found. Please install one to continue."
+  exit 1
+fi
+
 tar -xzf "$TMP_DIR/stylefreeze.tar.gz" -C "$TMP_DIR"
 
-install -m 755 "$TMP_DIR/stylefreeze" "$TARGET_DIR/stylefreeze"
+cp -f "$TMP_DIR/stylefreeze" "$TARGET_DIR/stylefreeze"
+chmod 755 "$TARGET_DIR/stylefreeze"
 
 echo "[OK] StyleFreeze installed successfully to $TARGET_DIR/stylefreeze"
 if ! echo "$PATH" | grep -q "$TARGET_DIR"; then

@@ -30,3 +30,18 @@ jobs:
 
       - name: Build binary
         run: cargo build --release --verbose
+
+  shell-compatibility-gate:
+    name: OpsScript Gate (Cross-Distro Compatibility)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify install.sh with OpsScript Gate
+        uses: Mresyzz/opsscript-gate@v0.9.8
+        with:
+          script-path: install.sh
+          matrix: "debian:12-slim,ubuntu:22.04,ubuntu:24.04,alpine:3.20"
+          packages: "curl,tar"
+          format: markdown
+          shell: posix
