@@ -1,0 +1,16 @@
+# StyleFreeze Configuration File
+# Documentation: https://github.com/Mresyzz/stylefreeze
+
+# Automatically preserve inline and block comments that an AI agent drops
+preserve_comments = true
+
+# Revert non-semantic quote changes (e.g. single vs double quotes)
+normalize_quotes = true
+
+# Paths to exclude from surgical filtering and audits
+exclude = [
+    "**/node_modules/**",
+    "**/target/**",
+    "**/dist/**",
+    "**/.venv/**",
+]

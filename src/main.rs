@@ -27,6 +27,13 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Commands {
+    /// Initialize StyleFreeze configuration and install hooks for all detected agents
+    Init {
+        /// Target repository directory (default: current directory)
+        #[arg(long, short = 'r', default_value = ".")]
+        repo: PathBuf,
+    },
+
     /// Filter a modified file or stdin, reverting non-semantic AST churn
     Filter {
         /// Target file path
@@ -97,6 +104,7 @@ fn main() -> Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
+        Commands::Init { repo } => handle_init(&repo),
         Commands::Filter {
             file,
             new_file,
@@ -115,6 +123,45 @@ fn main() -> Result<()> {
             HookAction::Install { target, repo } => handle_hook_install(&target, &repo),
         },
     }
+}
+
+fn handle_init(repo: &Path) -> Result<()> {
+    let abs_repo = fs::canonicalize(repo).unwrap_or_else(|_| repo.to_path_buf());
+    let config_path = abs_repo.join("stylefreeze.toml");
+
+    println!(
+        "{} Initializing StyleFreeze in {}...",
+        "[StyleFreeze]".bright_cyan().bold(),
+        abs_repo.display().to_string().bright_yellow()
+    );
+
+    if !config_path.exists() {
+        stylefreeze::config::StyleFreezeConfig::write_default(&config_path)?;
+        println!(
+            " {} Created configuration file: {}",
+            "[OK]".bright_green().bold(),
+            "stylefreeze.toml".bold()
+        );
+    } else {
+        println!(
+            " {} Configuration file already exists: {}",
+            "[INFO]".cyan().bold(),
+            "stylefreeze.toml".bold()
+        );
+    }
+
+    if abs_repo.join(".git").exists() {
+        let _ = install_git_hook(&abs_repo);
+    }
+    let _ = install_claude_hook(&abs_repo);
+    let _ = stylefreeze::hook::install_cursor_hook(&abs_repo);
+
+    println!(
+        "\n{} StyleFreeze successfully initialized. Your repo is now protected.",
+        "[OK]".bright_green().bold()
+    );
+
+    Ok(())
 }
 
 fn handle_filter(

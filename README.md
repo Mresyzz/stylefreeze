@@ -110,7 +110,15 @@ npx stylefreeze audit-git
 
 ## Quick Start
 
-### 1. Audit your repo's wasted tokens (Read-Only)
+### 1. One-Click Initialization (Recommended)
+
+Run `stylefreeze init` in any repository to automatically generate `stylefreeze.toml` and configure hooks for all detected agents (Claude Code, Cursor, and Git pre-commit):
+
+```bash
+stylefreeze init
+```
+
+### 2. Audit your repo's wasted tokens (Read-Only)
 
 See how much money and token context your coding agents have burned on formatting churn across your recent commits:
 
@@ -124,7 +132,7 @@ Or generate a clean Markdown table for your GitHub Pull Request comments:
 stylefreeze audit-git --pr
 ```
 
-### 2. Protect Claude Code
+### 3. Protect Claude Code
 
 Automatically sanitize every `Edit` or `Write` tool call before it touches disk:
 
@@ -134,7 +142,7 @@ stylefreeze hook install claude
 
 This writes a `PreToolUse` hook to `.claude/hooks.json`.
 
-### 3. Protect Cursor
+### 4. Protect Cursor
 
 Configure Cursor rules and connect StyleFreeze as an MCP server:
 
@@ -142,13 +150,13 @@ Configure Cursor rules and connect StyleFreeze as an MCP server:
 stylefreeze hook install cursor
 ```
 
-### 4. Protect via Git pre-commit
+### 5. Protect via Git pre-commit
 
 ```bash
 stylefreeze hook install git
 ```
 
-### 5. CLI & Visual Diff Breakdown
+### 6. CLI & Visual Diff Breakdown
 
 ```bash
 # Filter a file against git HEAD in-place and see the visual breakdown
@@ -161,7 +169,7 @@ stylefreeze filter original.py --new-file candidate.py --in-place
 cat candidate.ts | stylefreeze filter > surgical.ts
 ```
 
-### 6. Model Context Protocol (MCP) Server
+### 7. Model Context Protocol (MCP) Server
 
 StyleFreeze can run as a standard stdio MCP tool server:
 
