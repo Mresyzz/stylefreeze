@@ -117,15 +117,15 @@ pub fn render_pr_markdown(report: &AuditReport) -> String {
     let cost_usd = (report.estimated_tokens_wasted as f64) * 0.000075;
 
     format!(
-        "### 🧊 StyleFreeze Surgical Audit Report\n\n\
+        "### StyleFreeze Surgical Audit Report\n\n\
          > **Stop paying Opus to reformat your files.**\n\n\
          | Metric | Measurement |\n\
          | :--- | :--- |\n\
-         | 📄 **Files Inspected** | `{}` |\n\
-         | ✂️ **Pure AST Churn Stripped** | `{} lines` ({:.1}% of diff) |\n\
-         | 💸 **Estimated Token Context Saved** | `~{} tokens` |\n\
-         | 💰 **Estimated Bill Saved** | `${:.2} USD` |\n\
-         | 🧼 **Blame Contamination Avoided** | `{} files` |\n\n\
+         | **Files Inspected** | `{}` |\n\
+         | **Pure AST Churn Stripped** | `{} lines` ({:.1}% of diff) |\n\
+         | **Estimated Token Context Saved** | `~{} tokens` |\n\
+         | **Estimated Bill Saved** | `${:.2} USD` |\n\
+         | **Blame Contamination Avoided** | `{} files` |\n\n\
          *Protected by [StyleFreeze](https://github.com/stylefreeze/stylefreeze)*\n",
         report.files_inspected,
         report.total_churn_lines,
@@ -143,7 +143,6 @@ pub fn print_receipt(report: &AuditReport, repo_name: &str) {
         0.0
     };
 
-    // Opus/Sonnet blended pricing: approx $0.000075 per token for prompt roundtrips
     let cost_usd = (report.estimated_tokens_wasted as f64) * 0.000075;
 
     println!();
@@ -164,32 +163,32 @@ pub fn print_receipt(report: &AuditReport, repo_name: &str) {
     println!(" Contaminated Blames:  {} files", report.contaminated_files_count);
     println!("{}", "----------------------------------------------------------------------".dimmed());
     println!(
-        " 💸 Wasted Tokens:     {} Tokens",
+        " [WASTE] Wasted Tokens:     {} Tokens",
         report.estimated_tokens_wasted.to_string().bright_yellow().bold()
     );
     println!(
-        " 💰 Estimated Burned:  {}",
+        " [SAVED] Estimated Burned:  {}",
         format!("${:.2} USD", cost_usd).bright_green().bold()
     );
     println!("{}", "======================================================================".bold());
     if report.total_churn_lines > 0 {
         println!(
             " {}",
-            "⚠️  VERDICT: Your coding agent is burning tokens reformatting untouched code."
+            "[WARN] VERDICT: Your coding agent is burning tokens reformatting untouched code."
                 .yellow()
                 .bold()
         );
     } else {
         println!(
             " {}",
-            "✅ VERDICT: Clean repository! No unsolicited formatting churn detected."
+            "[OK] VERDICT: Clean repository! No unsolicited formatting churn detected."
                 .green()
                 .bold()
         );
     }
     println!("{}", "======================================================================".bold());
     println!(
-        " 👉 Install shield: {}",
+        " [SHIELD] Install shield: {}",
         "stylefreeze hook install claude".cyan().bold()
     );
     println!();

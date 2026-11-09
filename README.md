@@ -16,13 +16,13 @@
  Pure AST Churn:        9,840  [ 59.9% of total diffs! ]
  Contaminated Blames:      38 files
 ----------------------------------------------------------------------
- 💸 Wasted Tokens:     137,760 Tokens
- 💰 Estimated Burned:  $10.33 USD
+ [WASTE] Wasted Tokens:     137,760 Tokens
+ [SAVED] Estimated Burned:  $10.33 USD
 ======================================================================
- ⚠️  VERDICT: Your coding agent is burning ~60% of your token budget
-            re-indenting and reformatting untouched functions.
+ [WARN] VERDICT: Your coding agent is burning ~60% of your token budget
+                 re-indenting and reformatting untouched functions.
 ======================================================================
- 👉 Install shield: stylefreeze hook install claude
+ [SHIELD] Install shield: stylefreeze hook install claude
 ```
 
 ---

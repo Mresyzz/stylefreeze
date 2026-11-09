@@ -275,7 +275,7 @@ impl SurgicalEngine {
     pub fn render_visual_diff(&self, original: &str, candidate: &str, reconciled: &str) -> String {
         use colored::*;
         let mut out = String::new();
-        out.push_str(&format!("{}\n", "🧊 StyleFreeze Surgical Diff Breakdown:".bold().cyan()));
+        out.push_str(&format!("{}\n", "[StyleFreeze] Surgical Diff Breakdown:".bold().cyan()));
         out.push_str(&format!("{}\n", "------------------------------------------------------------".dimmed()));
 
         let diff_cand = TextDiff::from_lines(candidate, reconciled);
@@ -310,7 +310,7 @@ impl SurgicalEngine {
         out.push_str(&format!("{}\n", "------------------------------------------------------------".dimmed()));
         out.push_str(&format!(
             " {} {} lines of churn frozen, {} lines of logic applied.\n",
-            "✔".bright_green().bold(),
+            "[OK]".bright_green().bold(),
             churn_count.to_string().bright_yellow().bold(),
             applied_count.to_string().bright_green().bold()
         ));

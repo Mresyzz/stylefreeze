@@ -40,7 +40,7 @@ exit 0
 
     println!(
         "{} Git pre-commit hook installed to {}",
-        "✔".bright_green().bold(),
+        "[OK]".bright_green().bold(),
         pre_commit_path.display()
     );
     Ok(())
@@ -70,7 +70,7 @@ pub fn install_claude_hook(repo_dir: &Path) -> anyhow::Result<()> {
 
     println!(
         "{} Claude Code surgical hook configured in {}",
-        "✔".bright_green().bold(),
+        "[OK]".bright_green().bold(),
         hooks_config.display()
     );
     Ok(())
@@ -115,7 +115,7 @@ When modifying files in this repository:
 
     println!(
         "{} Cursor MDC rule and MCP server configured in {}",
-        "✔".bright_green().bold(),
+        "[OK]".bright_green().bold(),
         cursor_dir.display()
     );
     Ok(())
