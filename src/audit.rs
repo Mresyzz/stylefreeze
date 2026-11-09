@@ -108,6 +108,68 @@ pub fn run_git_audit(repo_dir: &Path, depth: usize) -> anyhow::Result<AuditRepor
     Ok(report)
 }
 
+pub fn run_git_audit_staged(repo_dir: &Path) -> anyhow::Result<AuditReport> {
+    let output = Command::new("git")
+        .args(["diff", "--cached", "--name-only", "--diff-filter=ACM"])
+        .current_dir(repo_dir)
+        .output()?;
+
+    let file_list = String::from_utf8_lossy(&output.stdout);
+    let mut report = AuditReport::default();
+    let mut contaminated = std::collections::HashSet::new();
+
+    for file_path in file_list.lines() {
+        let file_path = file_path.trim();
+        if file_path.is_empty() {
+            continue;
+        }
+
+        let path = Path::new(file_path);
+        let lang = match SupportedLang::from_path(path) {
+            Some(l) => l,
+            None => continue,
+        };
+
+        report.files_inspected += 1;
+
+        let head_res = Command::new("git")
+            .args(["show", &format!("HEAD:{}", file_path)])
+            .current_dir(repo_dir)
+            .output();
+
+        let head_text = match head_res {
+            Ok(out) if out.status.success() => String::from_utf8_lossy(&out.stdout).to_string(),
+            _ => continue,
+        };
+
+        let staged_res = Command::new("git")
+            .args(["show", &format!(":{}", file_path)])
+            .current_dir(repo_dir)
+            .output()?;
+
+        if !staged_res.status.success() {
+            continue;
+        }
+
+        let staged_text = String::from_utf8_lossy(&staged_res.stdout).to_string();
+
+        let engine = SurgicalEngine::new(lang);
+        let (_reconciled, stats) = engine.reconcile(&head_text, &staged_text);
+
+        report.total_raw_diff_lines += stats.raw_added_lines + stats.raw_removed_lines;
+        report.total_churn_lines += stats.discarded_churn_lines;
+        report.estimated_tokens_wasted += stats.estimated_tokens_saved;
+
+        if stats.discarded_churn_lines > 0 {
+            contaminated.insert(file_path.to_string());
+        }
+    }
+
+    report.commits_analyzed = 0;
+    report.contaminated_files_count = contaminated.len();
+    Ok(report)
+}
+
 pub fn render_pr_markdown(report: &AuditReport) -> String {
     let waste_percentage = if report.total_raw_diff_lines > 0 {
         (report.total_churn_lines as f64 / report.total_raw_diff_lines as f64) * 100.0

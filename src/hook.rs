@@ -16,7 +16,7 @@ pub fn install_git_hook(repo_dir: &Path) -> anyhow::Result<()> {
 
 if command -v stylefreeze >/dev/null 2>&1; then
     # Get staged files
-    STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|py|rs|go)$')
+    STAGED_FILES=$(git diff --cached --name-only --diff-filter=ACM | grep -E '\.(ts|tsx|js|jsx|py|rs|go|c|h|cpp|cc|json)$')
     for FILE in $STAGED_FILES; do
         if [ -f "$FILE" ]; then
             # Filter in-place

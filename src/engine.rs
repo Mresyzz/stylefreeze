@@ -591,4 +591,91 @@ pub fn format_id(id: u64) -> String {
         assert!(result.contains("  \"version\": \"1.0.0\""));
         assert!(stats.discarded_churn_lines > 0);
     }
+
+    #[test]
+    fn test_c_surgical_reconciliation() {
+        let original = r#"#include <stdio.h>
+
+int calculate_buffer_size(int packet_len) {
+    // Ensure padding for header
+    if (packet_len < 64) {
+        return 64;
+    }
+    return packet_len + 16;
+}
+
+void log_packet(const char* msg) {
+    printf("[PACKET] %s\n", msg);
+}
+"#;
+
+        // Candidate changed 64 -> 128, but reformatted whole file to 2 spaces
+        let candidate = r#"#include <stdio.h>
+
+int calculate_buffer_size(int packet_len) {
+  if (packet_len < 128) {
+    return 128;
+  }
+  return packet_len + 16;
+}
+
+void log_packet(const char* msg) {
+  printf("[PACKET] %s\n", msg);
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::C);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("C Result:\n{}", result);
+        assert!(result.contains("packet_len < 128"));
+        // log_packet must retain 4 spaces
+        assert!(result.contains("    printf(\"[PACKET] %s\\n\", msg);"));
+        // calculate_buffer_size comment must be preserved
+        assert!(result.contains("// Ensure padding for header"));
+        assert!(stats.discarded_churn_lines > 0);
+    }
+
+    #[test]
+    fn test_cpp_surgical_reconciliation() {
+        let original = r#"#include <string>
+
+namespace core {
+    class SessionManager {
+    public:
+        bool isValid(int id) {
+            // Check session ID positive
+            if (id <= 0) {
+                return false;
+            }
+            return true;
+        }
+    };
+}
+"#;
+
+        // Candidate changed <= 0 to < 0, but reformatted to 2 spaces
+        let candidate = r#"#include <string>
+
+namespace core {
+  class SessionManager {
+  public:
+    bool isValid(int id) {
+      if (id < 0) {
+        return false;
+      }
+      return true;
+    }
+  };
+}
+"#;
+
+        let engine = SurgicalEngine::new(SupportedLang::Cpp);
+        let (result, stats) = engine.reconcile(original, candidate);
+
+        println!("C++ Result:\n{}", result);
+        assert!(result.contains("id < 0"));
+        assert!(result.contains("// Check session ID positive"));
+        assert!(stats.discarded_churn_lines > 0);
+    }
 }

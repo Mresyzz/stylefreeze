@@ -10,6 +10,8 @@ pub enum SupportedLang {
     Rust,
     Go,
     Json,
+    C,
+    Cpp,
 }
 
 impl SupportedLang {
@@ -23,6 +25,8 @@ impl SupportedLang {
             "rs" => Some(Self::Rust),
             "go" => Some(Self::Go),
             "json" | "jsonc" => Some(Self::Json),
+            "c" | "h" => Some(Self::C),
+            "cpp" | "cc" | "cxx" | "hpp" | "hh" | "hxx" => Some(Self::Cpp),
             _ => None,
         }
     }
@@ -37,6 +41,8 @@ impl SupportedLang {
             Self::Rust => tree_sitter_rust::LANGUAGE.into(),
             Self::Go => tree_sitter_go::LANGUAGE.into(),
             Self::Json => tree_sitter_json::LANGUAGE.into(),
+            Self::C => tree_sitter_c::LANGUAGE.into(),
+            Self::Cpp => tree_sitter_cpp::LANGUAGE.into(),
         }
     }
 
@@ -49,6 +55,8 @@ impl SupportedLang {
             Self::Rust => "Rust",
             Self::Go => "Go",
             Self::Json => "JSON",
+            Self::C => "C",
+            Self::Cpp => "C++",
         }
     }
 }

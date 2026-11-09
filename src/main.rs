@@ -14,7 +14,7 @@ use stylefreeze::lang::SupportedLang;
 #[command(
     name = "stylefreeze",
     author = "StyleFreeze Contributors",
-    version = "0.3.0",
+    version = "0.3.1",
     about = "AST-level surgical diff enforcer & token churn shield for AI coding agents",
     long_about = "StyleFreeze intercepts AI file modifications and strips unsolicited formatting, \
                   indentation, and cosmetic churn at the AST level, ensuring minimal diffs and \
@@ -89,6 +89,10 @@ enum Commands {
         /// Output report in GitHub PR Markdown comment format
         #[arg(long)]
         pr: bool,
+
+        /// Audit currently staged changes instead of past commit history
+        #[arg(long, short = 's')]
+        staged: bool,
     },
 
     /// Run as a Model Context Protocol (MCP) server over stdio
@@ -133,7 +137,8 @@ fn main() -> Result<()> {
             repo,
             json,
             pr,
-        } => handle_audit_git(&repo, depth, json, pr),
+            staged,
+        } => handle_audit_git(&repo, depth, json, pr, staged),
         Commands::Mcp => stylefreeze::mcp::run_mcp_server(),
         Commands::Hook { action } => match action {
             HookAction::Install { target, repo } => handle_hook_install(&target, &repo),
@@ -301,7 +306,13 @@ fn handle_filter(
     Ok(())
 }
 
-fn handle_audit_git(repo: &Path, depth: usize, json_output: bool, pr_output: bool) -> Result<()> {
+fn handle_audit_git(
+    repo: &Path,
+    depth: usize,
+    json_output: bool,
+    pr_output: bool,
+    staged: bool,
+) -> Result<()> {
     let abs_repo = fs::canonicalize(repo).unwrap_or_else(|_| repo.to_path_buf());
     let repo_name = abs_repo
         .file_name()
@@ -309,15 +320,28 @@ fn handle_audit_git(repo: &Path, depth: usize, json_output: bool, pr_output: boo
         .unwrap_or_else(|| "current-repo".to_string());
 
     if !json_output && !pr_output {
-        eprintln!(
-            "{} Scanning past {} commits in {}...",
-            "[StyleFreeze]".bright_cyan().bold(),
-            depth,
-            repo_name.bright_yellow()
-        );
+        if staged {
+            eprintln!(
+                "{} Auditing staged changes in {}...",
+                "[StyleFreeze]".bright_cyan().bold(),
+                repo_name.bright_yellow()
+            );
+        } else {
+            eprintln!(
+                "{} Scanning past {} commits in {}...",
+                "[StyleFreeze]".bright_cyan().bold(),
+                depth,
+                repo_name.bright_yellow()
+            );
+        }
     }
 
-    let report = run_git_audit(&abs_repo, depth)?;
+    let report = if staged {
+        stylefreeze::audit::run_git_audit_staged(&abs_repo)?
+    } else {
+        run_git_audit(&abs_repo, depth)?
+    };
+
     if json_output {
         println!("{}", serde_json::to_string_pretty(&report)?);
     } else if pr_output {

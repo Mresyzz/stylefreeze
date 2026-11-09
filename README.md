@@ -7,7 +7,7 @@
 [![Release](https://img.shields.io/github/v/release/Mresyzz/stylefreeze?color=blue)](https://github.com/Mresyzz/stylefreeze/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Latency: Sub-3ms](https://img.shields.io/badge/Latency-%3C3ms-brightgreen.svg)]()
-[![Languages](https://img.shields.io/badge/Languages-TS%20%7C%20JS%20%7C%20Python%20%7C%20Rust%20%7C%20Go-orange.svg)]()
+[![Languages](https://img.shields.io/badge/Languages-TS%20%7C%20JS%20%7C%20Python%20%7C%20Rust%20%7C%20Go%20%7C%20C%2F%2B%2B%20%7C%20JSON-orange.svg)]()
 
 ```text
 ======================================================================
@@ -135,15 +135,16 @@ stylefreeze check --fix
 
 ### 3. Audit your repo's wasted tokens (Read-Only)
 
-See how much money and token context your coding agents have burned on formatting churn across your recent commits:
+See how much money and token context your coding agents have burned on formatting churn across your recent commits, or check staged changes before committing:
 
 ```bash
+# Audit past commits
 stylefreeze audit-git
-```
 
-Or generate a clean Markdown table for your GitHub Pull Request comments:
+# Audit currently staged changes before commit
+stylefreeze audit-git --staged
 
-```bash
+# Generate a clean Markdown table for Pull Request comments
 stylefreeze audit-git --pr
 ```
 
@@ -243,6 +244,8 @@ Benchmarked on varying TypeScript codebases with simulated AI cosmetic reformatt
 - **Python** (`.py`, `.pyi`)
 - **Rust** (`.rs`)
 - **Go** (`.go`)
+- **C** (`.c`, `.h`)
+- **C++** (`.cpp`, `.cc`, `.cxx`, `.hpp`, `.hh`, `.hxx`)
 - **JSON / JSONC** (`.json`, `.jsonc`)
 
 ---

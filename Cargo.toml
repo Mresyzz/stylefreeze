@@ -1,6 +1,6 @@
 [package]
 name = "stylefreeze"
-version = "0.3.0"
+version = "0.3.1"
 edition = "2024"
 authors = ["StyleFreeze Contributors <contributors@stylefreeze.dev>"]
 description = "AST-level surgical diff enforcer & token churn shield for AI coding agents"
@@ -23,6 +23,8 @@ serde_json = "1.0.154"
 similar = "3.2.1"
 toml = "1.2.1"
 tree-sitter = "0.27.2"
+tree-sitter-c = "0.24.2"
+tree-sitter-cpp = "0.23.4"
 tree-sitter-go = "0.25.0"
 tree-sitter-json = "0.24.8"
 tree-sitter-python = "0.25.0"
